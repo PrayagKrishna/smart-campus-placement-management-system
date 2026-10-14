@@ -55,7 +55,7 @@ Browser  ──HTTP──▶  Vite dev server (5173)  ──proxy──▶  Fast
 | Reporting SQL | `backend/app/routers/reports.py` | Thirteen named, parameterised queries. |
 | Demo data | `backend/seed.py` | Idempotent seed, plus a scoped reset. |
 | Tests | `backend/tests/` | Integration tests against the real database. |
-| Frontend | `frontend/src/` | React 18, TypeScript, Vite. Thirteen screens. |
+| Frontend | `frontend/src/` | React 18, TypeScript, Vite. Fifteen screens. |
 
 ### Why the schema is reflected, not declared
 
@@ -217,7 +217,7 @@ client. A test asserts this.
 
 ## 6. Implemented frontend modules
 
-React 18 with TypeScript, built by Vite. Thirteen screens, every one reading
+React 18 with TypeScript, built by Vite. Fifteen screens, every one reading
 live API data. There are no hardcoded arrays standing in for database rows.
 
 | # | Screen | Route | What it does |
