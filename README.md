@@ -1,14 +1,19 @@
 # Smart Campus Placement Management System
 
-**Phase 1 — Database Design and Implementation**
+**Phase 1 — Database Design · Phase 2 — Full Stack Application**
 
-A normalised relational database for a college placement cell, built on MySQL 8.0.
-It models students, recruiting companies, job drives and their eligibility criteria,
-skills, applications, interview rounds, offers and verified placement records.
+A normalised relational database for a college placement cell, built on MySQL 8.0,
+and the working application that runs on it. It models students, recruiting
+companies, job drives and their eligibility criteria, skills, applications,
+interview rounds, offers and verified placement records.
 
-This repository contains the complete Phase 1 deliverable: the ER/EER model, the
-relational schema, the normalisation analysis, the executable DDL scripts and the
-evidence captured from the running database.
+* **Phase 1** — the ER/EER model, the relational schema, the normalisation
+  analysis, the executable DDL scripts and the evidence from the running database.
+* **Phase 2** — a FastAPI backend and a React dashboard over that same schema,
+  with the cross-table business rules, demo data, reporting queries and tests.
+
+The Phase 1 schema is unchanged by Phase 2. The backend *reflects* the live tables
+instead of re-declaring them, so the application cannot drift from the DDL.
 
 ---
 
@@ -108,7 +113,8 @@ Database `smart_campus_placement` — **13 tables**, all InnoDB, all `utf8mb4` /
 - **`hr_email` is `NOT NULL UNIQUE` on purpose.** That makes it a candidate key of `company`,
   which is why `hr_email → hr_name` is a key dependency rather than a 3NF violation.
 - **No derived attributes are stored.** Placement status, age, applicant counts and the current
-  interview round are all computable, and will be exposed as views in Phase 2.
+  interview round are all computable. Phase 2 computes them with SQL aggregation at read
+  time rather than storing them; no view was created.
 - **Delete rules are chosen per relationship**, not applied uniformly: `CASCADE` where a child
   has no meaning without its parent, `RESTRICT` where the row is placement history.
 - **Foreign keys live in their own script** so table creation order never blocks a rerun and
@@ -128,6 +134,9 @@ Database `smart_campus_placement` — **13 tables**, all InnoDB, all `utf8mb4` /
 | Character set | `utf8mb4`, collation `utf8mb4_0900_ai_ci` |
 | Tooling | MySQL Workbench (EER diagram and evidence capture) |
 | Scripts | Plain MySQL DDL, run locally, no external services |
+| Backend (Phase 2) | Python 3.12, FastAPI, SQLAlchemy 2.0 Core, PyMySQL, Pydantic |
+| Frontend (Phase 2) | React 18, TypeScript, Vite |
+| Tests (Phase 2) | pytest, against the real MySQL database |
 
 > `CHECK` constraints are only **enforced** from MySQL **8.0.16**. Earlier versions parse
 > them and ignore them silently.
@@ -138,12 +147,14 @@ Database `smart_campus_placement` — **13 tables**, all InnoDB, all `utf8mb4` /
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Phase 1** | Requirement analysis, ER/EER diagram, relational model, normalisation, DDL | **Complete** — this repository |
-| Phase 2 | DML and data population, business logic, front end, database connectivity | Planned |
-| Phase 3 | Testing, validation, demonstration, final documentation | Planned |
+| **Phase 1** | Requirement analysis, ER/EER diagram, relational model, normalisation, DDL | **Complete** |
+| **Phase 2** | Data population, business logic, REST API, front end, database connectivity, tests | **Complete** |
+| Phase 3 | Role based access, end to end browser tests, demonstration, final documentation | Planned |
 
-Phase 1 contains **no triggers, no views, no sample data and no application code**. Those are
-Phase 2 work and are listed here as planned, not as delivered.
+Phase 2 added **no table, column, key, constraint, trigger or view**. The cross-table rules
+that a MySQL `CHECK` cannot express are enforced in the backend service layer, so they apply
+to every caller and not only to the browser. One documented rule (T9) remains unimplemented;
+it is listed in the Phase 2 limitations rather than claimed as done.
 
 ---
 
@@ -159,10 +170,36 @@ Phase 2 work and are listed here as planned, not as delivered.
 │   ├── 03_constraints.sql       14 named FOREIGN KEY constraints
 │   ├── 04_verify.sql            verification queries against INFORMATION_SCHEMA
 │   └── README.md                run order and constraint enforcement strategy
+├── backend/                     Phase 2 — FastAPI service
+│   ├── app/
+│   │   ├── main.py              application, routers, middleware
+│   │   ├── config.py            environment configuration, no credential in code
+│   │   ├── db.py                engine, schema reflection, one transaction per request
+│   │   ├── schemas.py           Pydantic request and response models
+│   │   ├── rules.py             the cross-table business rules and project policies
+│   │   ├── errors.py            MySQL error numbers to HTTP status codes
+│   │   └── routers/             meta, students, drives, workflow, reports
+│   ├── tests/                   67 integration tests against the real database
+│   ├── seed.py                  idempotent demo data, plus a scoped reset
+│   ├── requirements.txt
+│   └── .env.example             empty password placeholder, never a real credential
+├── frontend/                    Phase 2 — React + TypeScript dashboard
+│   ├── src/
+│   │   ├── App.tsx              routing and navigation
+│   │   ├── api.ts               fetch wrapper and error handling
+│   │   ├── components/          table, badges, pager, generic form modal
+│   │   └── pages/               the 15 screens
+│   ├── package.json
+│   └── vite.config.ts           dev proxy to the backend
 └── docs/
     ├── final/
     │   ├── Smart_Campus_Placement_Phase_1_Report.pdf
     │   └── Smart_Campus_Placement_Phase_1_Report.docx
+    ├── phase-2/
+    │   ├── PHASE_2_IMPLEMENTATION.md
+    │   ├── API_REFERENCE.md
+    │   ├── TEST_RESULTS.md
+    │   └── screenshots/         17 captures from the running application
     └── evidence/
         ├── S1_workbench_tables.png
         ├── S2_show_tables.png
@@ -209,6 +246,84 @@ constraint enforcement strategy.
 
 ---
 
+## Running the application
+
+Requires the Phase 1 database above, Python 3.12 or later, and Node.js 20 or later.
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+cp .env.example .env          # set DB_USER, and DB_PASSWORD if you use one
+
+.venv/bin/python seed.py                              # load the demo data
+.venv/bin/uvicorn app.main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Tests
+
+```bash
+cd backend && .venv/bin/python -m pytest -v
+```
+
+### Local URLs
+
+| What | URL |
+|---|---|
+| Application | http://127.0.0.1:5173 |
+| API | http://127.0.0.1:8000/api |
+| Interactive API documentation | http://127.0.0.1:8000/docs |
+| Health check | http://127.0.0.1:8000/api/health |
+
+### Credentials
+
+No password is stored in this repository. `backend/.env.example` ships an **empty**
+`DB_PASSWORD`, and `backend/.env` is git-ignored. If you leave `DB_PASSWORD` empty, the
+MySQL driver reads your local option file (`~/.my.cnf`) exactly as the `mysql` command line
+client does; the application never opens, prints or commits that file. The browser never
+receives a credential — it calls a relative `/api` path that the dev server proxies.
+
+### Demo data
+
+`seed.py` matches every row on its natural key, so running it again updates rather than
+duplicates. It never drops or truncates a table and never disables a foreign key check.
+`seed.py --reset` removes only the demo rows it owns, children first; if one of your own
+rows references demo data, a `RESTRICT` foreign key stops the delete and the script says so.
+`seed.py --summary` prints row counts without writing.
+
+---
+
+## Phase 2 documentation
+
+| Document | Contents |
+|---|---|
+| 📘 [`PHASE_2_IMPLEMENTATION.md`](docs/phase-2/PHASE_2_IMPLEMENTATION.md) | Architecture, connectivity, data strategy, the business rules and project policies, reporting queries, limitations, next steps |
+| 📗 [`API_REFERENCE.md`](docs/phase-2/API_REFERENCE.md) | All 52 endpoints, conventions, status codes, notable request and response shapes |
+| 📙 [`TEST_RESULTS.md`](docs/phase-2/TEST_RESULTS.md) | The 67 test results, the manual verification log, and what was *not* tested |
+
+Screenshots captured from the running application are in
+[`docs/phase-2/screenshots/`](docs/phase-2/screenshots/).
+
+![Phase 2 placement dashboard](docs/phase-2/screenshots/P01_dashboard.png)
+
+The eligibility check screen shows every rule with its required and actual value, which is
+the clearest single view of the Phase 2 business logic:
+
+![Eligibility check showing every rule](docs/phase-2/screenshots/P08_eligibility_check.png)
+
+---
+
 ## EER diagram
 
 Reverse-engineered in MySQL Workbench from the live `smart_campus_placement` schema, so it
@@ -247,5 +362,5 @@ An editable `.docx` source is in the same folder.
 
 ## Academic context
 
-Database Systems (BACSE202) · Fall Semester 2026–27 · Assessment 8, Project Phase 1
+Database Systems (BACSE202) · Fall Semester 2026–27 · Project Phases 1 and 2
 Author: Prayag Krishna
