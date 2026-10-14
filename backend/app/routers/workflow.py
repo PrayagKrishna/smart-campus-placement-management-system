@@ -306,7 +306,7 @@ def get_offer(offer_id: int, conn: Conn) -> dict[str, Any]:
     "/offers", status_code=status.HTTP_201_CREATED, summary="Issue an offer"
 )
 def create_offer(payload: OfferCreate, conn: Conn) -> dict[str, Any]:
-    """Creates the offer and moves the application to 'Selected' (rule T6).
+    """Creates the offer and moves the application to 'Selected'.
 
     Both writes share one transaction, so a failure leaves neither behind.
     """
@@ -420,7 +420,7 @@ def get_placement(placement_id: int, conn: Conn) -> dict[str, Any]:
     summary="Record a verified joining (accepted offers only)",
 )
 def create_placement(payload: PlacementCreate, conn: Conn) -> dict[str, Any]:
-    """Rule T1 — the offer must already be 'Accepted'.
+    """The offer must already be 'Accepted'.
 
     An offer is not a placement. A placement is a verified joining, confirmed
     by a named verifier.

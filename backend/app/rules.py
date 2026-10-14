@@ -1,28 +1,29 @@
 """Business rules that no CHECK constraint can express.
 
-Phase 1 documented these as Tier 2 / Tier 3 rules in ``database/README.md``
+Phase 1 documented these as cross-table rules in ``database/README.md``
 because a MySQL CHECK may only read columns of the row being written. They are
 enforced here, in the service layer, so they apply to every caller of the API
 and not only to the frontend.
 
 Documented project policies, stated explicitly rather than left implicit:
 
-P1. A drive with **no** ``eligibility_criteria`` row has **no academic gate**.
+Missing criteria. A drive with **no** ``eligibility_criteria`` row has **no
+    academic gate**.
     It is treated as "criteria not defined", never as "all cut-offs are zero".
     The API reports ``criteria_defined: false`` so a caller can tell the two
     cases apart. Department and deadline rules still apply.
 
-P2. A drive with **no** ``drive_eligible_department`` rows is open to every
+Missing departments. A drive with **no** ``drive_eligible_department`` rows is open to every
     department. Once at least one row exists, the drive is restricted to the
     listed departments only.
 
-P3. "Already placed" means the student holds an offer with status
+Already placed. This means the student holds an offer with status
     ``Accepted``, or a verified ``placement_record``. This is what
     ``allow_placed_students = FALSE`` blocks.
 
-P4. A student may only apply while ``drive_status = 'Open'``.
+Open drives only. A student may apply only while ``drive_status = 'Open'``.
 
-P5. ``drive_status`` moves forward only, along the transitions in
+Forward only. ``drive_status`` moves forward only, along the transitions in
     ``DRIVE_STATUS_TRANSITIONS``.
 """
 
@@ -34,7 +35,7 @@ from sqlalchemy import Connection, and_, func, or_, select
 
 from .db import exists, fetch_all, fetch_one, get_by_pk, t
 
-# P5 — allowed forward moves for drive_status (Tier 2 rule T8).
+# Allowed forward moves for drive_status. A status never moves backwards.
 DRIVE_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "Upcoming": {"Open", "Cancelled"},
     "Open": {"Closed", "Cancelled"},
@@ -70,7 +71,7 @@ def require(conn: Connection, table: str, pk_col: str, pk_val: Any) -> dict[str,
 
 
 def is_student_placed(conn: Connection, student_id: int) -> bool:
-    """P3 — an Accepted offer or a verified placement counts as placed."""
+    """Already placed: an Accepted offer or a verified placement counts."""
     app_t, offer_t, pr_t = t("application"), t("offer"), t("placement_record")
     stmt = (
         select(func.count())
@@ -136,7 +137,7 @@ def evaluate_eligibility(
     checks: list[dict[str, Any]] = []
     reasons: list[str] = []
 
-    # P4 — drive must be open for applications.
+    # The drive must be open for applications.
     if enforce_drive_status:
         ok = drive["drive_status"] == "Open"
         checks.append(_check("drive_status", "Open", drive["drive_status"], ok))
@@ -146,14 +147,14 @@ def evaluate_eligibility(
                 "only accepted while the status is 'Open'."
             )
 
-    # T2 — application deadline.
+    # The application deadline must not have passed.
     deadline = drive["apply_deadline"]
     ok = today <= deadline
     checks.append(_check("apply_deadline", f"on or before {deadline}", today, ok))
     if not ok:
         reasons.append(f"Application deadline passed on {deadline}.")
 
-    # T4 / P2 — department restriction.
+    # Department restriction. No rows means every department may apply.
     dept_ids = eligible_department_ids(conn, drive_id)
     department_restricted = bool(dept_ids)
     if department_restricted:
@@ -164,7 +165,7 @@ def evaluate_eligibility(
                 "Student's department is not in the drive's eligible department list."
             )
 
-    # T3 / T5 / P1 — academic criteria.
+    # Academic criteria. No row means no academic gate, not zero cut-offs.
     criteria = get_by_pk(conn, "eligibility_criteria", "drive_id", drive_id)
     criteria_defined = criteria is not None
 
@@ -219,7 +220,7 @@ def evaluate_eligibility(
                     "placement, and this drive does not allow placed students."
                 )
     else:
-        # P1 — reported, never silently treated as zero cut-offs.
+        # Reported as undefined, never silently treated as zero cut-offs.
         checks.append(
             _check("eligibility_criteria", "optional", "not defined for this drive", True)
         )
@@ -278,7 +279,7 @@ def assert_interview_ok(
 ) -> None:
     application = require(conn, "application", "application_id", application_id)
 
-    # T7 — an interview cannot predate the application.
+    # An interview cannot be scheduled before its application was made.
     if scheduled_at is not None and scheduled_at < application["applied_on"]:
         raise RuleViolation(
             f"Interview is scheduled at {scheduled_at}, which is before the "
@@ -310,7 +311,7 @@ def assert_interview_ok(
 
 def assert_offer_ok(conn: Connection, application_id: int) -> None:
     require(conn, "application", "application_id", application_id)
-    # T10 / one-offer policy, also guarded by uq_offer_application.
+    # One offer per application, also guarded by uq_offer_application.
     if exists(conn, "offer", application_id=application_id):
         raise RuleViolation(
             f"Application {application_id} already has an offer. "
@@ -319,7 +320,7 @@ def assert_offer_ok(conn: Connection, application_id: int) -> None:
 
 
 def mark_application_selected(conn: Connection, application_id: int) -> None:
-    """T6 — issuing an offer moves the application to 'Selected'.
+    """Issuing an offer moves the application to 'Selected'.
 
     Runs in the caller's transaction, so the offer and the status change commit
     or roll back together.
@@ -337,7 +338,7 @@ def mark_application_selected(conn: Connection, application_id: int) -> None:
 
 def assert_placement_ok(conn: Connection, offer_id: int) -> dict[str, Any]:
     offer = require(conn, "offer", "offer_id", offer_id)
-    # T1 — a placement may only be recorded against an accepted offer.
+    # A placement may only be recorded against an accepted offer.
     if offer["offer_status"] != "Accepted":
         raise RuleViolation(
             f"Offer {offer_id} has status '{offer['offer_status']}'. A placement "
