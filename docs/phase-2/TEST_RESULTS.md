@@ -262,8 +262,8 @@ is the exact network path the browser's form uses.
 
 | Step | Result |
 |---|---|
-| `POST /api/companies` through the Vite proxy | `HTTP 201`, `company_id: 130` |
-| Row present in MySQL | `SELECT` returned the row with `created_at 2026-10-14 14:59:53` |
+| `POST /api/companies` through the Vite proxy | `HTTP 201`, `company_id: 231` |
+| Row present in MySQL | `SELECT` returned the row with `created_at 2026-10-14 15:17:58` |
 | Visible in the rendered UI | Yes — `screenshots/P16_write_verification.png`, "Showing 1–11 of 11" |
 | Duplicate name rejected | `HTTP 409`, "Violated constraint: company.uq_company_name" |
 

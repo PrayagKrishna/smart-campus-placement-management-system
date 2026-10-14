@@ -53,7 +53,7 @@ export default function App() {
       <nav className={`sidebar${navOpen ? " open" : ""}`} aria-label="Sections">
         <p className="brand">
           Campus Placement
-          <span>Management System · Phase 2</span>
+          <span>Management System</span>
         </p>
         <div className="nav">
           {NAV.map((section) => (
